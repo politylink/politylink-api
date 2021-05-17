@@ -11,10 +11,10 @@ from api.bill.search import search_bills
 def get_bills_api():
     kwargs = {
         # query param
-        'query': request.json.get('query'),
+        'query': request.args.get('q'),
         # response param
-        'num_items': int(request.json.get('items', 3)),
-        'fragment_size': int(request.json.get('fragment', 100))
+        'num_items': int(request.args.get('items', 3)),
+        'fragment_size': int(request.args.get('fragment', 100))
     }
     app.logger.info(kwargs)
     bills = search_bills(**kwargs)

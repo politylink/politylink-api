@@ -8,29 +8,37 @@ from politylink.graphql.client import GraphQLClient
 
 LOGGER = logging.getLogger(__name__)
 es_client = ElasticsearchClient()
-gql_client = GraphQLClient()
+gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
 
 def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
-        .query('multi_match', query=query, fields=[BillText.Field.TITLE, BillText.Field.REASON, BillText.Field.BODY]) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
-        .highlight(BillText.Field.REASON, BillText.Field.BODY, fragment_size=fragment_size, number_of_fragments=1,
-                   pre_tags=['<b>'], post_tags=['</b>'])
+        .sort('-' + BillText.Field.LAST_UPDATED_DATE)
+    if query:
+        s = s.query('multi_match', query=query,
+                    fields=[BillText.Field.TITLE, BillText.Field.REASON, BillText.Field.BODY,
+                            BillText.Field.TAGS, BillText.Field.ALIASES]) \
+            .highlight(BillText.Field.REASON, BillText.Field.BODY,
+                       boundary_chars='.,!? \t\n、。',
+                       fragment_size=fragment_size, number_of_fragments=1,
+                       pre_tags=['<b>'], post_tags=['</b>'])
     s = s[:num_items]
     response = s.execute()
 
     records = []
     for hit in response.hits:
         bill_id = hit.id
-        record = {'bill_id': bill_id}
+        record = {'id': bill_id}
 
-        if 'reason' in hit.meta.highlight:
+        if hasattr(hit.meta, 'highlight') and 'reason' in hit.meta.highlight:
             record['fragment'] = hit.meta.highlight['reason'][0]
-        elif 'body' in hit.meta.highlight:
+        elif hasattr(hit.meta, 'highlight') and 'body' in hit.meta.highlight:
             record['fragment'] = hit.meta.highlight['body'][0]
         else:
             record['fragment'] = hit.reason[:fragment_size]
+        if record['fragment'][-1] != '。':
+            record['fragment'] += '...'
 
         es_fields = ['submitted_date', 'last_updated_date']
         for es_field in es_fields:
@@ -73,7 +81,7 @@ def get_status_label(bill):
     for field, label in zip(fields, labels):
         if hasattr(bill, field):
             field_date = getattr(bill, field).formatted
-            if field_date and field_date >= max_date:  # prioritize later label
+            if field_date and field_date >= max_date:  # >= to prioritize later label
                 max_date = field_date
                 max_label = label
     return max_label
