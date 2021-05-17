@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "politylink-api"
+version = "0.1.0"
+description = ""
+authors = ["Mitsuki Usui"]
+
+[tool.poetry.dependencies]
+python = "^3.6.1"
+Flask = "^2.0.0"
+requests = "^2.25.1"
+Flask-Cors = "^3.0.10"
+elasticsearch-dsl = "^7.3.0"
+politylink = "^0.1.71"
+orjson = "^3.5.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
