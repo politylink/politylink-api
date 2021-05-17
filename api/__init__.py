@@ -7,3 +7,4 @@ app.config['JSON_AS_ASCII'] = False
 app.config['CORS_HEADERS'] = 'Content-Type'
 
 import api.wordcloud
+import api.bill

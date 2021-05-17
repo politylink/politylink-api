@@ -10,7 +10,7 @@ gql_client = GraphQLClient()
 
 
 def search_speech(term: str, start_date_str: str, end_date_str: str, committee: str = None,
-                  num_items=3, fragment_size=100):
+                  num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=SpeechText.index) \
         .filter('range', **{SpeechText.Field.DATE: {'gte': start_date_str, 'lt': end_date_str}}) \
         .query('multi_match', query=term, fields=[SpeechText.Field.BODY]) \
