@@ -10,6 +10,11 @@ LOGGER = logging.getLogger(__name__)
 es_client = ElasticsearchClient()
 gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
+GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes']
+GQL_DATE_FIELDS = ['submitted_date', 'passed_representatives_committee_date', 'passed_representatives_date',
+                   'passed_councilors_committee_date', 'passed_councilors_date', 'proclaimed_date']
+GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
+
 
 def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
@@ -24,12 +29,22 @@ def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
                        fragment_size=fragment_size, number_of_fragments=1,
                        pre_tags=['<b>'], post_tags=['</b>'])
     s = s[:num_items]
-    response = s.execute()
+    es_response = s.execute()
 
-    records = []
-    for hit in response.hits:
+    if not es_response.hits:
+        return list()
+
+    bill_ids = [hit.id for hit in es_response.hits]
+    bill_info_map = fetch_gql_bill_info_map(bill_ids)
+    bill_records = []
+    for hit in es_response.hits:
         bill_id = hit.id
+        if bill_id not in bill_info_map:
+            LOGGER.warning(f'failed to fetch {bill_id} from GraphQL')
+            continue
+
         record = {'id': bill_id}
+        record.update(bill_info_map[bill_id])
 
         if hasattr(hit.meta, 'highlight') and 'reason' in hit.meta.highlight:
             record['fragment'] = hit.meta.highlight['reason'][0]
@@ -45,24 +60,24 @@ def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
             if hasattr(hit, es_field):
                 record[es_field] = getattr(hit, es_field)
 
-        record.update(fetch_gql_bill_info(bill_id))
-
-        records.append(record)
-    return records
+        bill_records.append(record)
+    return bill_records
 
 
-def fetch_gql_bill_info(bill_id):
-    bill = gql_client.get(bill_id)
-    bill_info = {
-        'name': bill.name,
-        'bill_number': bill.bill_number,
-        'bill_number_short': to_bill_number_short(bill.bill_number),
-        'status_label': get_status_label(bill),
-        'tags': bill.tags if bill.tags else list(),
-        'total_news': bill.total_news,
-        'total_minutes': bill.total_minutes
-    }
-    return bill_info
+def fetch_gql_bill_info_map(bill_ids):
+    bills = gql_client.bulk_get(bill_ids, fields=GQL_FIELDS + GQL_DATE_FIELDS)
+    bill_info_map = dict()
+    for bill in bills:
+        bill_info_map[bill.id] = {
+            'name': bill.name,
+            'bill_number': bill.bill_number,
+            'bill_number_short': to_bill_number_short(bill.bill_number),
+            'status_label': get_status_label(bill),
+            'tags': bill.tags if bill.tags else list(),
+            'total_news': bill.total_news,
+            'total_minutes': bill.total_minutes
+        }
+    return bill_info_map
 
 
 def to_bill_number_short(bill_number):
@@ -72,13 +87,9 @@ def to_bill_number_short(bill_number):
 
 
 def get_status_label(bill):
-    fields = ['submitted_date', 'passed_representatives_committee_date', 'passed_representatives_date',
-              'passed_councilors_committee_date', 'passed_councilors_date', 'proclaimed_date']
-    labels = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
-
     max_date = ''
-    max_label = '提出'
-    for field, label in zip(fields, labels):
+    max_label = ''
+    for field, label in zip(GQL_DATE_FIELDS, GQL_DATE_LABELS):
         if hasattr(bill, field):
             field_date = getattr(bill, field).formatted
             if field_date and field_date >= max_date:  # >= to prioritize later label
