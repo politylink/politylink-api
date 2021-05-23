@@ -1,7 +1,7 @@
 import logging
 import re
 
-from elasticsearch_dsl import Search
+from elasticsearch_dsl import Search, AttrList
 from politylink.elasticsearch.client import ElasticsearchClient
 from politylink.elasticsearch.schema import BillText
 from politylink.graphql.client import GraphQLClient
@@ -16,7 +16,8 @@ GQL_DATE_FIELDS = ['submitted_date', 'passed_representatives_committee_date', 'p
 GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
 
 
-def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
+def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_diets=None,
+                 num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
         .sort('-' + BillText.Field.LAST_UPDATED_DATE)
@@ -28,6 +29,14 @@ def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
                        pre_tags=['<b>'], post_tags=['</b>'])
+    if categories:
+        # ES analyzer includes lowercase token filter
+        categories = [str(category).lower() for category in categories]
+        s = s.filter('terms', category=categories)
+    if belonged_to_diets:
+        s = s.filter('terms', belonged_to_diets=belonged_to_diets)
+    if submitted_diets:
+        s = s.filter('terms', submitted_diet=submitted_diets)
     s = s[:num_items]
     es_response = s.execute()
 
@@ -55,10 +64,13 @@ def search_bills(query: str, num_items: int = 3, fragment_size: int = 100):
         if record['fragment'][-1] != '。':
             record['fragment'] += '...'
 
-        es_fields = ['submitted_date', 'last_updated_date']
+        es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
+                     BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
         for es_field in es_fields:
+            es_field = es_field.value
             if hasattr(hit, es_field):
-                record[es_field] = getattr(hit, es_field)
+                value = getattr(hit, es_field)
+                record[es_field] = list(value) if isinstance(value, AttrList) else value
 
         bill_records.append(record)
     return bill_records
@@ -70,6 +82,7 @@ def fetch_gql_bill_info_map(bill_ids):
     for bill in bills:
         bill_info_map[bill.id] = {
             'name': bill.name,
+            'category': bill.category,
             'bill_number': bill.bill_number,
             'bill_number_short': to_bill_number_short(bill.bill_number),
             'status_label': get_status_label(bill),
