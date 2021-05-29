@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 es_client = ElasticsearchClient()
 gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
-GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes']
+GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes', 'urls']
 GQL_DATE_FIELDS = ['submitted_date', 'passed_representatives_committee_date', 'passed_representatives_date',
                    'passed_councilors_committee_date', 'passed_councilors_date', 'proclaimed_date']
 GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
@@ -88,7 +88,8 @@ def fetch_gql_bill_info_map(bill_ids):
             'status_label': get_status_label(bill),
             'tags': bill.tags if bill.tags else list(),
             'total_news': bill.total_news,
-            'total_minutes': bill.total_minutes
+            'total_minutes': bill.total_minutes,
+            'total_pdfs': sum('PDF' in url.title for url in bill.urls)
         }
     return bill_info_map
 
