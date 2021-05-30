@@ -17,9 +17,10 @@ def get_bills_api():
         'belonged_to_diets': request.args.getlist('diet', lambda x: int(x)),
         'submitted_diets': request.args.getlist('sdiet', lambda x: int(x)),
         # response param
+        'page': int(request.args.get('page', 1)),
         'num_items': int(request.args.get('items', 3)),
         'fragment_size': int(request.args.get('fragment', 100))
     }
     app.logger.info(kwargs)
-    bills = search_bills(**kwargs)
-    return orjson.dumps(bills)
+    response = search_bills(**kwargs)
+    return orjson.dumps(response)

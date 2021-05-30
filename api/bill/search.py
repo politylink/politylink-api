@@ -1,6 +1,7 @@
 import logging
 import re
 
+import stringcase
 from elasticsearch_dsl import Search, AttrList
 from politylink.elasticsearch.client import ElasticsearchClient
 from politylink.elasticsearch.schema import BillText
@@ -17,7 +18,7 @@ GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参�
 
 
 def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_diets=None,
-                 num_items: int = 3, fragment_size: int = 100):
+                 page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
         .sort('-' + BillText.Field.LAST_UPDATED_DATE)
@@ -37,11 +38,11 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
         s = s.filter('terms', belonged_to_diets=belonged_to_diets)
     if submitted_diets:
         s = s.filter('terms', submitted_diet=submitted_diets)
-    s = s[:num_items]
-    es_response = s.execute()
 
-    if not es_response.hits:
-        return list()
+    idx_from = (page - 1) * num_items
+    idx_to = page * num_items
+    s = s[idx_from: idx_to]
+    es_response = s.execute()
 
     bill_ids = [hit.id for hit in es_response.hits]
     bill_info_map = fetch_gql_bill_info_map(bill_ids)
@@ -70,26 +71,31 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
             es_field = es_field.value
             if hasattr(hit, es_field):
                 value = getattr(hit, es_field)
-                record[es_field] = list(value) if isinstance(value, AttrList) else value
+                record[stringcase.camelcase(es_field)] = list(value) if isinstance(value, AttrList) else value
 
         bill_records.append(record)
-    return bill_records
+    return {
+        'totalBills': es_response.hits.total.value,
+        'bills': bill_records
+    }
 
 
 def fetch_gql_bill_info_map(bill_ids):
-    bills = gql_client.bulk_get(bill_ids, fields=GQL_FIELDS + GQL_DATE_FIELDS)
     bill_info_map = dict()
+    if not bill_ids:
+        return bill_info_map
+    bills = gql_client.bulk_get(bill_ids, fields=GQL_FIELDS + GQL_DATE_FIELDS)
     for bill in bills:
         bill_info_map[bill.id] = {
             'name': bill.name,
             'category': bill.category,
-            'bill_number': bill.bill_number,
-            'bill_number_short': to_bill_number_short(bill.bill_number),
-            'status_label': get_status_label(bill),
+            'billNumber': bill.bill_number,
+            'billNumberShort': to_bill_number_short(bill.bill_number),
+            'statusLabel': get_status_label(bill),
             'tags': bill.tags if bill.tags else list(),
-            'total_news': bill.total_news,
-            'total_minutes': bill.total_minutes,
-            'total_pdfs': sum('PDF' in url.title for url in bill.urls)
+            'totalNews': bill.total_news,
+            'totalMinutes': bill.total_minutes,
+            'totalPdfs': sum('PDF' in url.title for url in bill.urls)
         }
     return bill_info_map
 
