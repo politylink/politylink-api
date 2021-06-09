@@ -24,8 +24,9 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
         .sort('-' + BillText.Field.LAST_UPDATED_DATE)
     if query:
         s = s.query('multi_match', query=query,
-                    fields=[BillText.Field.TITLE, BillText.Field.REASON, BillText.Field.BODY,
-                            BillText.Field.TAGS, BillText.Field.ALIASES]) \
+                    fields=[BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100",
+                            BillText.Field.REASON + "^10", BillText.Field.ALIASES + "^10",
+                            BillText.Field.BODY]) \
             .highlight(BillText.Field.REASON, BillText.Field.BODY,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
@@ -42,6 +43,7 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
     idx_from = (page - 1) * num_items
     idx_to = page * num_items
     s = s[idx_from: idx_to]
+    LOGGER.debug(s.to_dict())
     es_response = s.execute()
 
     bill_ids = [hit.id for hit in es_response.hits]
