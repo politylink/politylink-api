@@ -20,17 +20,19 @@ GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参�
 def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_diets=None,
                  page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
-        .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
-        .sort('-' + BillText.Field.LAST_UPDATED_DATE)
+        .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
     if query:
         s = s.query('multi_match', query=query,
                     fields=[BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100",
                             BillText.Field.REASON + "^10", BillText.Field.ALIASES + "^10",
-                            BillText.Field.BODY]) \
+                            BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
             .highlight(BillText.Field.REASON, BillText.Field.BODY,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
                        pre_tags=['<b>'], post_tags=['</b>'])
+    else:
+        s = s.sort('-' + BillText.Field.LAST_UPDATED_DATE)
+
     if categories:
         # ES analyzer includes lowercase token filter
         categories = [str(category).lower() for category in categories]
