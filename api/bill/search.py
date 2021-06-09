@@ -26,7 +26,8 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
                     fields=[BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100",
                             BillText.Field.REASON + "^10", BillText.Field.ALIASES + "^10",
                             BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
-            .highlight(BillText.Field.REASON, BillText.Field.BODY,
+            .query('function_score', functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE.value: {'scale': '30d'}}}]) \
+            .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
                        pre_tags=['<b>'], post_tags=['</b>'])
@@ -60,11 +61,12 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
         record = {'id': bill_id}
         record.update(bill_info_map[bill_id])
 
-        if hasattr(hit.meta, 'highlight') and 'reason' in hit.meta.highlight:
-            record['fragment'] = hit.meta.highlight['reason'][0]
-        elif hasattr(hit.meta, 'highlight') and 'body' in hit.meta.highlight:
-            record['fragment'] = hit.meta.highlight['body'][0]
-        else:
+        if hasattr(hit.meta, 'highlight'):
+            for field in [BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT]:
+                if field.value in hit.meta.highlight:
+                    record['fragment'] = hit.meta.highlight[field.value][0]
+                    break
+        if 'fragment' not in record:
             record['fragment'] = hit.reason[:fragment_size]
         if record['fragment'][-1] != '。':
             record['fragment'] += '...'
