@@ -1,7 +1,6 @@
 import orjson
 from flask import request
 from flask_cors import cross_origin
-from politylink.graphql.schema import BillCategory
 
 from api import app
 from api.bill.search import search_bills
@@ -13,7 +12,8 @@ def get_bills_api():
     kwargs = {
         # query param
         'query': request.args.get('q'),
-        'categories': request.args.getlist('category', lambda x: BillCategory(x.upper())),
+        'categories': request.args.getlist('category', lambda x: int(x)),
+        'statuses': request.args.getlist('status', lambda x: int(x)),
         'belonged_to_diets': request.args.getlist('diet', lambda x: int(x)),
         'submitted_diets': request.args.getlist('sdiet', lambda x: int(x)),
         # response param
