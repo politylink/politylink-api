@@ -80,7 +80,7 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
         if record['fragment'][-1] != '。':
             record['fragment'] += '...'
 
-        record['statusLabel'] = BillStatus.from_index(hit.status)
+        record['statusLabel'] = BillStatus.from_index(hit.status if hasattr(hit, 'status') else 0)
 
         es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
                      BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
