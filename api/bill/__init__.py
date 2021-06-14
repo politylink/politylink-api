@@ -21,6 +21,6 @@ def get_bills_api():
         'num_items': int(request.args.get('items', 3)),
         'fragment_size': int(request.args.get('fragment', 100))
     }
-    app.logger.info(kwargs)
+    app.logger.info(f'search bills: {kwargs}')
     response = search_bills(**kwargs)
     return orjson.dumps(response)

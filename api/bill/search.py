@@ -2,6 +2,7 @@ import logging
 import re
 
 import stringcase
+import time
 from elasticsearch_dsl import Search, AttrList
 
 from politylink.elasticsearch.client import ElasticsearchClient
@@ -13,9 +14,6 @@ es_client = ElasticsearchClient()
 gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
 GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes', 'urls']
-GQL_DATE_FIELDS = ['submitted_date', 'passed_representatives_committee_date', 'passed_representatives_date',
-                   'passed_councilors_committee_date', 'passed_councilors_date', 'proclaimed_date']
-GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
 
 
 def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=None, submitted_diets=None,
@@ -23,11 +21,12 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
     if query:
-        s = s.query('multi_match', query=query,
-                    fields=[BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100",
-                            BillText.Field.REASON + "^10", BillText.Field.ALIASES + "^10",
-                            BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
-            .query('function_score', functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '30d'}}}]) \
+        fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
+                  BillText.Field.REASON + "^10",
+                  BillText.Field.BODY, BillText.Field.SUPPLEMENT]
+        s = s.query('function_score',
+                    query={'multi_match': {'query': query, 'fields': fields}},
+                    functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '30d'}}}]) \
             .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
@@ -48,10 +47,19 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
     idx_to = page * num_items
     s = s[idx_from: idx_to]
     LOGGER.debug(s.to_dict())
+
+    start_time_ms = time.time() * 1000
     es_response = s.execute()
+    end_time_ms = time.time() * 1000
+    LOGGER.debug(f'took {end_time_ms - start_time_ms} for elasticsearch')
 
     bill_ids = [hit.id for hit in es_response.hits]
+
+    start_time_ms = time.time() * 1000
     bill_info_map = fetch_gql_bill_info_map(bill_ids)
+    end_time_ms = time.time() * 1000
+    LOGGER.debug(f'took {end_time_ms - start_time_ms} for GraphQL')
+
     bill_records = []
     for hit in es_response.hits:
         bill_id = hit.id
@@ -72,6 +80,8 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
         if record['fragment'][-1] != '。':
             record['fragment'] += '...'
 
+        record['statusLabel'] = BillStatus.from_index(hit.status)
+
         es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
                      BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
         for es_field in es_fields:
@@ -91,13 +101,12 @@ def fetch_gql_bill_info_map(bill_ids):
     bill_info_map = dict()
     if not bill_ids:
         return bill_info_map
-    bills = gql_client.bulk_get(bill_ids, fields=GQL_FIELDS + GQL_DATE_FIELDS)
+    bills = gql_client.bulk_get(bill_ids, fields=GQL_FIELDS)
     for bill in bills:
         bill_info_map[bill.id] = {
             'name': bill.name,
             'billNumber': bill.bill_number,
             'billNumberShort': to_bill_number_short(bill.bill_number),
-            'statusLabel': BillStatus.from_gql(bill).label,
             'tags': bill.tags if bill.tags else list(),
             'totalNews': bill.total_news,
             'totalMinutes': bill.total_minutes,
