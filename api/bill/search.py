@@ -3,8 +3,9 @@ import re
 
 import stringcase
 from elasticsearch_dsl import Search, AttrList
+
 from politylink.elasticsearch.client import ElasticsearchClient
-from politylink.elasticsearch.schema import BillText
+from politylink.elasticsearch.schema import BillText, BillStatus
 from politylink.graphql.client import GraphQLClient
 
 LOGGER = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ GQL_DATE_FIELDS = ['submitted_date', 'passed_representatives_committee_date', 'p
 GQL_DATE_LABELS = ['提出', '衆委可決', '衆可決', '参委可決', '参可決', '公布']
 
 
-def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_diets=None,
+def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=None, submitted_diets=None,
                  page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
@@ -26,7 +27,7 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
                     fields=[BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100",
                             BillText.Field.REASON + "^10", BillText.Field.ALIASES + "^10",
                             BillText.Field.BODY, BillText.Field.SUPPLEMENT]) \
-            .query('function_score', functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE.value: {'scale': '30d'}}}]) \
+            .query('function_score', functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '30d'}}}]) \
             .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
@@ -35,9 +36,9 @@ def search_bills(query: str, categories=None, belonged_to_diets=None, submitted_
         s = s.sort('-' + BillText.Field.LAST_UPDATED_DATE)
 
     if categories:
-        # ES analyzer includes lowercase token filter
-        categories = [str(category).lower() for category in categories]
         s = s.filter('terms', category=categories)
+    if statuses:
+        s = s.filter('terms', status=statuses)
     if belonged_to_diets:
         s = s.filter('terms', belonged_to_diets=belonged_to_diets)
     if submitted_diets:
@@ -94,10 +95,9 @@ def fetch_gql_bill_info_map(bill_ids):
     for bill in bills:
         bill_info_map[bill.id] = {
             'name': bill.name,
-            'category': bill.category,
             'billNumber': bill.bill_number,
             'billNumberShort': to_bill_number_short(bill.bill_number),
-            'statusLabel': get_status_label(bill),
+            'statusLabel': BillStatus.from_gql(bill).label,
             'tags': bill.tags if bill.tags else list(),
             'totalNews': bill.total_news,
             'totalMinutes': bill.total_minutes,
@@ -110,15 +110,3 @@ def to_bill_number_short(bill_number):
     pattern = '第([0-9]+)回国会([衆|参|閣])法第([0-9]+)号'
     m = re.match(pattern, bill_number)
     return '-'.join(m.groups())
-
-
-def get_status_label(bill):
-    max_date = ''
-    max_label = ''
-    for field, label in zip(GQL_DATE_FIELDS, GQL_DATE_LABELS):
-        if hasattr(bill, field):
-            field_date = getattr(bill, field).formatted
-            if field_date and field_date >= max_date:  # >= to prioritize later label
-                max_date = field_date
-                max_label = label
-    return max_label
