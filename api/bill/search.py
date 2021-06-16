@@ -17,13 +17,14 @@ GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'to
 
 
 def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=None, submitted_diets=None,
-                 page: int = 1, num_items: int = 3, fragment_size: int = 100):
+                 full_text=False, page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
     if query:
         fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
-                  BillText.Field.REASON + "^10",
-                  BillText.Field.BODY, BillText.Field.SUPPLEMENT]
+                  BillText.Field.REASON + "^10"]
+        if full_text:
+            fields += [BillText.Field.BODY, BillText.Field.SUPPLEMENT]
         s = s.query('function_score',
                     query={'multi_match': {'query': query, 'fields': fields}},
                     functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '30d', 'decay': 0.8}}}]) \
