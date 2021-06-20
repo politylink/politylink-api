@@ -27,7 +27,7 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
             fields += [BillText.Field.BODY, BillText.Field.SUPPLEMENT]
         s = s.query('function_score',
                     query={'multi_match': {'query': query, 'fields': fields}},
-                    functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '30d', 'decay': 0.8}}}]) \
+                    functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '180d', 'decay': 0.8}}}]) \
             .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
                        boundary_chars='.,!? \t\n、。',
                        fragment_size=fragment_size, number_of_fragments=1,
