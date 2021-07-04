@@ -1,5 +1,4 @@
 import logging
-import re
 
 import stringcase
 import time
@@ -8,6 +7,7 @@ from elasticsearch_dsl import Search, AttrList
 from politylink.elasticsearch.client import ElasticsearchClient
 from politylink.elasticsearch.schema import BillText, BillStatus
 from politylink.graphql.client import GraphQLClient
+from politylink.utils.bill import extract_bill_number_or_none
 
 LOGGER = logging.getLogger(__name__)
 es_client = ElasticsearchClient()
@@ -21,17 +21,21 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
     if query:
-        fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
-                  BillText.Field.BILL_NUMBER + "^100", BillText.Field.REASON + "^10"]
-        if full_text:
-            fields += [BillText.Field.BODY, BillText.Field.SUPPLEMENT]
-        s = s.query('function_score',
-                    query={'multi_match': {'query': query, 'fields': fields}},
-                    functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '180d', 'decay': 0.8}}}]) \
-            .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
-                       boundary_chars='.,!? \t\n、。',
-                       fragment_size=fragment_size, number_of_fragments=1,
-                       pre_tags=['<b>'], post_tags=['</b>'])
+        maybe_bill_number = extract_bill_number_or_none(query)
+        if maybe_bill_number:
+            s = s.filter('terms', bill_number=maybe_bill_number)
+        else:
+            fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
+                      BillText.Field.BILL_NUMBER + "^100", BillText.Field.REASON + "^10"]
+            if full_text:
+                fields += [BillText.Field.BODY, BillText.Field.SUPPLEMENT]
+            s = s.query('function_score',
+                        query={'multi_match': {'query': query, 'fields': fields}},
+                        functions=[{'gauss': {BillText.Field.LAST_UPDATED_DATE: {'scale': '180d', 'decay': 0.8}}}]) \
+                .highlight(BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT,
+                           boundary_chars='.,!? \t\n、。',
+                           fragment_size=fragment_size, number_of_fragments=1,
+                           pre_tags=['<b>'], post_tags=['</b>'])
     else:
         s = s.sort('-' + BillText.Field.LAST_UPDATED_DATE)
 
@@ -108,16 +112,10 @@ def fetch_gql_bill_info_map(bill_ids):
         bill_info_map[bill.id] = {
             'name': bill.name,
             'billNumber': bill.bill_number,
-            'billNumberShort': to_bill_number_short(bill.bill_number),
+            'billNumberShort': extract_bill_number_or_none(bill.bill_number, short=True),
             'tags': bill.tags if bill.tags else list(),
             'totalNews': bill.total_news,
             'totalMinutes': bill.total_minutes,
             'totalPdfs': sum('PDF' in url.title for url in bill.urls)
         }
     return bill_info_map
-
-
-def to_bill_number_short(bill_number):
-    pattern = '第([0-9]+)回国会([衆|参|閣])法第([0-9]+)号'
-    m = re.match(pattern, bill_number)
-    return '-'.join(m.groups())
