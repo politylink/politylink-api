@@ -22,7 +22,7 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
     if query:
         fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
-                  BillText.Field.REASON + "^10"]
+                  BillText.Field.BILL_NUMBER + "^100", BillText.Field.REASON + "^10"]
         if full_text:
             fields += [BillText.Field.BODY, BillText.Field.SUPPLEMENT]
         s = s.query('function_score',
