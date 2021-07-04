@@ -23,7 +23,7 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
     if query:
         maybe_bill_number = extract_bill_number_or_none(query)
         if maybe_bill_number:
-            s = s.filter('terms', bill_number=maybe_bill_number)
+            s = s.query('match_phrase', bill_number=maybe_bill_number)
         else:
             fields = [BillText.Field.TITLE + "^100", BillText.Field.TAGS + "^100", BillText.Field.ALIASES + "^100",
                       BillText.Field.BILL_NUMBER + "^100", BillText.Field.REASON + "^10"]
