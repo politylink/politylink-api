@@ -12,6 +12,7 @@ Flask-Cors = "^3.0.10"
 elasticsearch-dsl = "^7.3.0"
 politylink = "^0.1.71"
 orjson = "^3.5.2"
+waitress = "^2.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
