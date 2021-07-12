@@ -79,7 +79,7 @@ def build_response(es_response, bill_info_map, fragment_size):
         bill_id = hit.id
         if bill_id in bill_info_map:
             bill_info = bill_info_map.get(bill_id)
-            bill_records.append(build_bill_record(es_response, bill_info, fragment_size))
+            bill_records.append(build_bill_record(hit, bill_info, fragment_size))
         else:
             LOGGER.warning(f'failed to fetch {bill_id} from GraphQL')
     return {
@@ -88,31 +88,31 @@ def build_response(es_response, bill_info_map, fragment_size):
     }
 
 
-def build_bill_record(es_hit, bill_info, fragment_size):
-    record = {'id': es_hit.id}
+def build_bill_record(hit, bill_info, fragment_size):
+    record = {'id': hit.id}
     record.update(bill_info)
 
     fragment = None
-    if hasattr(es_hit.meta, 'highlight'):
+    if hasattr(hit.meta, 'highlight'):
         for field in [BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT]:
-            if field.value in es_hit.meta.highlight:
-                fragment = es_hit.meta.highlight[field.value][0]
+            if field.value in hit.meta.highlight:
+                fragment = hit.meta.highlight[field.value][0]
                 break
     if not fragment:
-        fragment = es_hit.reason[:fragment_size]
+        fragment = hit.reason[:fragment_size]
     if fragment[-1] != '。':
         fragment += '...'
     record['fragment'] = fragment
 
-    status_index = es_hit.status if hasattr(es_hit, 'status') else 0
+    status_index = hit.status if hasattr(hit, 'status') else 0
     record['statusLabel'] = BillStatus.from_index(status_index).label
 
     es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
                  BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
     for es_field in es_fields:
         es_field = es_field.value
-        if hasattr(es_hit, es_field):
-            value = getattr(es_hit, es_field)
+        if hasattr(hit, es_field):
+            value = getattr(hit, es_field)
             record[stringcase.camelcase(es_field)] = list(value) if isinstance(value, AttrList) else value
 
     return record
