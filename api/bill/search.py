@@ -14,6 +14,8 @@ es_client = ElasticsearchClient()
 gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
 GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes', 'urls']
+ES_FIELDS = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
+             BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
 
 
 def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=None, submitted_diets=None,
@@ -107,9 +109,7 @@ def build_bill_record(hit, bill_info, fragment_size):
     status_index = hit.status if hasattr(hit, 'status') else 0
     record['statusLabel'] = BillStatus.from_index(status_index).label
 
-    es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
-                 BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
-    for es_field in es_fields:
+    for es_field in ES_FIELDS:
         es_field = es_field.value
         if hasattr(hit, es_field):
             value = getattr(hit, es_field)
