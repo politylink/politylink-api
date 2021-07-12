@@ -16,6 +16,9 @@ def get_bills_api():
         'statuses': request.args.getlist('status', lambda x: int(x)),
         'belonged_to_diets': request.args.getlist('diet', lambda x: int(x)),
         'submitted_diets': request.args.getlist('sdiet', lambda x: int(x)),
+        'submitted_groups': request.args.getlist('sbgroup', lambda x: int(x)),
+        'supported_groups': request.args.getlist('spgroup', lambda x: int(x)),
+        'opposed_groups': request.args.getlist('opgroup', lambda x: int(x)),
         'full_text': request.args.get('full', 'false') == 'true',
         # response param
         'page': int(request.args.get('page', 1)),

@@ -14,9 +14,12 @@ es_client = ElasticsearchClient()
 gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 
 GQL_FIELDS = ['id', 'name', 'bill_number', 'category', 'tags', 'total_news', 'total_minutes', 'urls']
+ES_FIELDS = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
+             BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
 
 
 def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=None, submitted_diets=None,
+                 submitted_groups=None, supported_groups=None, opposed_groups=None,
                  full_text=False, page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=BillText.index) \
         .source(excludes=[BillText.Field.BODY, BillText.Field.SUPPLEMENT])
@@ -47,6 +50,12 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
         s = s.filter('terms', belonged_to_diets=belonged_to_diets)
     if submitted_diets:
         s = s.filter('terms', submitted_diet=submitted_diets)
+    if submitted_groups:
+        s = s.filter('terms', submitted_groups=submitted_groups)
+    if supported_groups:
+        s = s.filter('terms', supported_groups=supported_groups)
+    if opposed_groups:
+        s = s.filter('terms', opposed_groups=opposed_groups)
 
     idx_from = (page - 1) * num_items
     idx_to = page * num_items
@@ -58,49 +67,55 @@ def search_bills(query: str, categories=None, statuses=None, belonged_to_diets=N
     end_time_ms = time.time() * 1000
     LOGGER.debug(f'took {end_time_ms - start_time_ms} for elasticsearch')
 
-    bill_ids = [hit.id for hit in es_response.hits]
-
     start_time_ms = time.time() * 1000
-    bill_info_map = fetch_gql_bill_info_map(bill_ids)
+    bill_info_map = fetch_gql_bill_info_map([hit.id for hit in es_response.hits])
     end_time_ms = time.time() * 1000
     LOGGER.debug(f'took {end_time_ms - start_time_ms} for GraphQL')
 
+    return build_response(es_response, bill_info_map, fragment_size)
+
+
+def build_response(es_response, bill_info_map, fragment_size):
     bill_records = []
     for hit in es_response.hits:
         bill_id = hit.id
-        if bill_id not in bill_info_map:
+        if bill_id in bill_info_map:
+            bill_info = bill_info_map.get(bill_id)
+            bill_records.append(build_bill_record(hit, bill_info, fragment_size))
+        else:
             LOGGER.warning(f'failed to fetch {bill_id} from GraphQL')
-            continue
-
-        record = {'id': bill_id}
-        record.update(bill_info_map[bill_id])
-
-        if hasattr(hit.meta, 'highlight'):
-            for field in [BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT]:
-                if field.value in hit.meta.highlight:
-                    record['fragment'] = hit.meta.highlight[field.value][0]
-                    break
-        if 'fragment' not in record:
-            record['fragment'] = hit.reason[:fragment_size]
-        if record['fragment'][-1] != '。':
-            record['fragment'] += '...'
-
-        status_index = hit.status if hasattr(hit, 'status') else 0
-        record['statusLabel'] = BillStatus.from_index(status_index).label
-
-        es_fields = [BillText.Field.SUBMITTED_DATE, BillText.Field.LAST_UPDATED_DATE,
-                     BillText.Field.SUBMITTED_DIET, BillText.Field.BELONGED_TO_DIETS]
-        for es_field in es_fields:
-            es_field = es_field.value
-            if hasattr(hit, es_field):
-                value = getattr(hit, es_field)
-                record[stringcase.camelcase(es_field)] = list(value) if isinstance(value, AttrList) else value
-
-        bill_records.append(record)
     return {
         'totalBills': es_response.hits.total.value,
         'bills': bill_records
     }
+
+
+def build_bill_record(hit, bill_info, fragment_size):
+    record = {'id': hit.id}
+    record.update(bill_info)
+
+    fragment = None
+    if hasattr(hit.meta, 'highlight'):
+        for field in [BillText.Field.REASON, BillText.Field.BODY, BillText.Field.SUPPLEMENT]:
+            if field.value in hit.meta.highlight:
+                fragment = hit.meta.highlight[field.value][0]
+                break
+    if not fragment:
+        fragment = hit.reason[:fragment_size]
+    if fragment[-1] != '。':
+        fragment += '...'
+    record['fragment'] = fragment
+
+    status_index = hit.status if hasattr(hit, 'status') else 0
+    record['statusLabel'] = BillStatus.from_index(status_index).label
+
+    for es_field in ES_FIELDS:
+        es_field = es_field.value
+        if hasattr(hit, es_field):
+            value = getattr(hit, es_field)
+            record[stringcase.camelcase(es_field)] = list(value) if isinstance(value, AttrList) else value
+
+    return record
 
 
 def fetch_gql_bill_info_map(bill_ids):
