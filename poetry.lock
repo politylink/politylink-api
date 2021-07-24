@@ -407,7 +407,7 @@ description = ""
 name = "politylink"
 optional = false
 python-versions = ">=3.6.1,<4.0.0"
-version = "0.1.77"
+version = "0.1.83"
 
 [package.dependencies]
 elasticsearch = ">=7.9.1,<8.0.0"
@@ -1091,8 +1091,8 @@ pluggy = [
     {file = "pluggy-0.13.1.tar.gz", hash = "sha256:15b2acde666561e1298d71b523007ed7364de07029219b604cf808bfa1c765b0"},
 ]
 politylink = [
-    {file = "politylink-0.1.77-py3-none-any.whl", hash = "sha256:dd6d4043eb0c8be4d058c410d08c3a23d8c541b7533d3c571906cbea0a1bafaf"},
-    {file = "politylink-0.1.77.tar.gz", hash = "sha256:fc2b4da071dded8c730a7857aadb7b31c8916006ba02744d1a655b85c845b1dd"},
+    {file = "politylink-0.1.83-py3-none-any.whl", hash = "sha256:69ae7a640b0e35575e484e5e041f438e46aa405742bdffea7b9e6d4f34e31243"},
+    {file = "politylink-0.1.83.tar.gz", hash = "sha256:b4a6118ec50e7374c08f232f63c8de88f1607f049f3fb65c782e2252e93cdab8"},
 ]
 preshed = [
     {file = "preshed-3.0.5-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:572899224578d30f6a67fadecb3d62b824866b4d2b6bad73f71abf7585db1389"},

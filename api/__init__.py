@@ -6,7 +6,7 @@ from flask import Flask
 from flask_cors import CORS
 
 LOGGER = getLogger(__name__)
-handler = RotatingFileHandler('./log/api.log', maxBytes=10000, backupCount=3)
+handler = RotatingFileHandler('./log/api.log', maxBytes=1000000, backupCount=3)
 formatter = logging.Formatter('%(asctime)s [%(name)s] %(levelname)s: %(message)s')
 handler.setFormatter(formatter)
 LOGGER.addHandler(handler)
@@ -18,3 +18,4 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 import api.wordcloud
 import api.bill
+import api.member
