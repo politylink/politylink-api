@@ -12,7 +12,8 @@ def get_members_api():
     kwargs = {
         # query param
         'query': request.args.get('q'),
-        'groups':  request.args.getlist('group', lambda x: int(x)),
+        'groups': request.args.getlist('group', lambda x: int(x)),
+        'houses': request.args.getlist('house', lambda x: int(x)),
         # response param
         'page': int(request.args.get('page', 1)),
         'num_items': int(request.args.get('items', 3)),
