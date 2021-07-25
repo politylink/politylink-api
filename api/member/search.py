@@ -5,7 +5,7 @@ from elasticsearch_dsl import Search
 from sgqlc.operation import Operation
 
 from politylink.elasticsearch.client import ElasticsearchClient
-from politylink.elasticsearch.schema import MemberText, ParliamentaryGroup
+from politylink.elasticsearch.schema import MemberText, ParliamentaryGroup, House
 from politylink.graphql.client import GraphQLClient
 from politylink.graphql.schema import Query, _MemberFilter, Activity
 from politylink.utils import to_date_str
@@ -17,7 +17,7 @@ gql_client = GraphQLClient(url='https://graphql.politylink.jp')
 GQL_FIELDS = ['id', 'name', 'name_hira', 'group']
 
 
-def search_members(query: str, groups=None, page: int = 1, num_items: int = 3, fragment_size: int = 100):
+def search_members(query: str, groups=None, houses=None, page: int = 1, num_items: int = 3, fragment_size: int = 100):
     s = Search(using=es_client.client, index=MemberText.index)
     if query:
         fields = [MemberText.Field.NAME + '^100', MemberText.Field.NAME_HIRA + '^100',
@@ -32,6 +32,8 @@ def search_members(query: str, groups=None, page: int = 1, num_items: int = 3, f
 
     if groups:
         s = s.filter('terms', group=groups)
+    if houses:
+        s = s.filter('terms', house=houses)
 
     idx_from = (page - 1) * num_items
     idx_to = page * num_items
@@ -81,6 +83,9 @@ def build_member_record(hit, member_info, fragment_size):
     if fragment[-1] != '。':
         fragment += '...'
     record['fragment'] = fragment
+
+    if hasattr(hit, 'house'):
+        record['house'] = House.from_index(hit.house).label
 
     return record
 
